@@ -12,11 +12,29 @@
             background-size: cover; background-position: center; background-attachment: fixed;
             overflow: hidden; user-select: none; background-color: #000; height: 100vh; margin: 0;
         }
-        #bootScreenOverlay, #macOSLoginScreen, #shutdownScreenOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
+        #bootScreenOverlay, #macOSLoginScreen, #shutdownScreenOverlay, #powerButtonScreenEl { /* Added powerButtonScreenEl */
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: white;
+        }
         #bootScreenOverlay { background-color: #000; z-index: 10000; }
         #bootScreenOverlay .apple-logo-boot { font-size: 80px; margin-bottom: 40px; }
         .progress-bar-container { width: 200px; height: 5px; background-color: #333; border-radius: 3px; overflow: hidden; }
         .progress-bar { width: 0%; height: 100%; background-color: #fff; border-radius: 3px; transition: width 0.1s linear; }
+
+        #powerButtonScreenEl { background-color: #000; z-index: 10001; /* Highest when PC is off */ }
+        #powerButtonIcon {
+            font-size: 70px;
+            color: #555; /* Dimmed power button */
+            cursor: pointer;
+            transition: color 0.3s ease, transform 0.3s ease;
+        }
+        #powerButtonIcon:hover {
+            color: #fff; /* Brighter on hover */
+            transform: scale(1.1);
+        }
+
+
         #macOSLoginScreen { z-index: 9999; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background-color: rgba(0,0,0,0.3); }
         .macos-login-box { text-align: center; padding: 40px; }
         .macos-login-box .user-avatar { width: 100px; height: 100px; border-radius: 50%; margin: 0 auto 20px auto; object-fit: cover; border: 3px solid rgba(255,255,255,0.5); }
@@ -116,8 +134,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div id="powerButtonScreenEl" class="flex-display"> <i id="powerButtonIcon" class="fas fa-power-off"></i>
+    </div>
 
-    <div id="bootScreenOverlay"><i class="fab fa-apple apple-logo-boot"></i><div class="progress-bar-container"><div id="bootProgressBar" class="progress-bar"></div></div></div>
+    <div id="bootScreenOverlay" class="hidden"><i class="fab fa-apple apple-logo-boot"></i><div class="progress-bar-container"><div id="bootProgressBar" class="progress-bar"></div></div></div>
     <div id="macOSLoginScreen" class="hidden"><div class="macos-login-box"><img src="https://i.ibb.co/5gR8SmSv/lspd-logo.png" alt="LSPD Officer" class="user-avatar" onerror="this.src='https://placehold.co/100x100/cccccc/ffffff?text=PD';"><div id="macOSLoginUserName" class="user-name">PD-61</div><input type="password" id="macOSPasswordInput" placeholder="Passwort eingeben"><button id="macOSLoginButton" class="login-button-macos"><i class="fas fa-arrow-right"></i></button><p id="macOSLoginError" class="macos-login-error"></p></div></div>
     <div id="shutdownScreenOverlay" class="hidden"><i class="fas fa-power-off"></i><span>Herunterfahren...</span></div>
 
@@ -256,6 +276,9 @@
             const macOSLoginUserNameEl = document.getElementById('macOSLoginUserName');
             const shutdownScreenOverlayEl = document.getElementById('shutdownScreenOverlay');
             const desktopEnvironmentEl = document.getElementById('desktopEnvironment');
+            const powerButtonScreenEl = document.getElementById('powerButtonScreenEl'); // New
+            const powerButtonIconEl = document.getElementById('powerButtonIcon'); // New
+
 
             const appleLogoMenuContainerEl = document.getElementById('appleLogoMenuContainer');
             const appleMenuDropdownEl = document.getElementById('appleMenuDropdownEl');
@@ -414,7 +437,7 @@
             let currentLoggedInUser = "";
             let editingPersonId = null;
             let editingVehiclePlate = null;
-            let currentActiveUnitId = null; // ID der aktuell vom User angemeldeten Einheit
+            let currentActiveUnitId = null;
 
             const MENU_BAR_HEIGHT = 28;
             const DOCK_APPROX_HEIGHT = 70;
@@ -457,12 +480,30 @@
 
             function generateUniqueId(prefix = "") { return prefix + Date.now().toString(36) + Math.random().toString(36).substring(2); }
 
-            function startBootProcess() {
-                pcState = 'booting';
-                setVisibility(bootScreenOverlayEl, true); setVisibility(macOSLoginScreenEl, false);
-                setVisibility(desktopEnvironmentEl, false); setVisibility(shutdownScreenOverlayEl, false);
+            function showPowerButtonScreen() {
+                pcState = 'off';
+                setVisibility(powerButtonScreenEl, true);
+                setVisibility(bootScreenOverlayEl, false);
+                setVisibility(macOSLoginScreenEl, false);
+                setVisibility(desktopEnvironmentEl, false);
+                setVisibility(shutdownScreenOverlayEl, false);
                 if(cadWindowEl) cadWindowEl.classList.remove('visible');
+            }
+
+
+            function startBootProcess() {
+                if (pcState !== 'off' && pcState !== 'shutting_down_complete') return; // Allow boot only if fully off
+                pcState = 'booting';
+                setVisibility(powerButtonScreenEl, false); // Hide power button
+                setVisibility(bootScreenOverlayEl, true);
+                setVisibility(macOSLoginScreenEl, false);
+                setVisibility(desktopEnvironmentEl, false);
+                setVisibility(shutdownScreenOverlayEl, false);
+                if(cadWindowEl) cadWindowEl.classList.remove('visible');
+
                 let progress = 0;
+                if(bootProgressBarEl) bootProgressBarEl.style.width = '0%'; // Reset progress bar
+
                 const interval = setInterval(() => {
                     progress += Math.random() * 10 + 5;
                     if (progress >= 100) {
@@ -480,6 +521,10 @@
                    if(bootProgressBarEl) bootProgressBarEl.style.width = progress + '%';
                 }, 150);
             }
+            if(powerButtonIconEl) {
+                powerButtonIconEl.addEventListener('click', startBootProcess);
+            }
+
 
             function handleMacOSLogin() {
                 if (pcState !== 'at_mac_login_screen' || !macOSPasswordInputEl || !macOSLoginErrorEl) return;
@@ -502,18 +547,14 @@
 
             function handleMacOSLogout() {
                 if (pcState !== 'desktop_active') return;
-                 // Aktive Einheit des Nutzers abmelden
                 if (currentActiveUnitId) {
                     const unitIndex = mockUnitsOnDuty.findIndex(u => u.unitId === currentActiveUnitId && u.officer === currentLoggedInUser);
-                    if (unitIndex > -1) {
-                        mockUnitsOnDuty.splice(unitIndex, 1);
-                    }
+                    if (unitIndex > -1) mockUnitsOnDuty.splice(unitIndex, 1);
                     currentActiveUnitId = null;
-                    if(unitIdInputEl) unitIdInputEl.value = "";
-                    if(unitIdInputEl) unitIdInputEl.disabled = false;
+                    if(unitIdInputEl) { unitIdInputEl.value = ""; unitIdInputEl.disabled = false; }
                     if(updateUnitStatusBtnEl) updateUnitStatusBtnEl.textContent = "Status aktualisieren / Anmelden";
+                    renderActiveUnits(); renderUnitStatusDashboard();
                 }
-
                 currentLoggedInUser = ""; setVisibility(desktopEnvironmentEl, false);
                 if(cadWindowEl) cadWindowEl.classList.remove('visible');
                 setVisibility(macOSLoginScreenEl, true);
@@ -527,12 +568,9 @@
 
             function startShutdownProcess() {
                 if (pcState !== 'desktop_active' && pcState !== 'at_mac_login_screen') return;
-                 // Aktive Einheit des Nutzers abmelden
                 if (currentActiveUnitId) {
                     const unitIndex = mockUnitsOnDuty.findIndex(u => u.unitId === currentActiveUnitId && u.officer === currentLoggedInUser);
-                    if (unitIndex > -1) {
-                        mockUnitsOnDuty.splice(unitIndex, 1);
-                    }
+                    if (unitIndex > -1) mockUnitsOnDuty.splice(unitIndex, 1);
                 }
                 pcState = 'shutting_down';
                 setVisibility(desktopEnvironmentEl, false); setVisibility(macOSLoginScreenEl, false);
@@ -541,7 +579,8 @@
                 setTimeout(() => {
                     setVisibility(shutdownScreenOverlayEl, false);
                     if(bootProgressBarEl) bootProgressBarEl.style.width = '0%';
-                    pcState = 'off'; setVisibility(bootScreenOverlayEl, true);
+                    pcState = 'shutting_down_complete'; // New intermediate state before 'off'
+                    showPowerButtonScreen(); // Show power button screen
                 }, 3000);
             }
 
@@ -858,7 +897,7 @@
             }
 
             function renderActiveIncidents() {
-                if (!activeIncidentsTableBodyEl) return; // Corrected variable name
+                if (!activeIncidentsTableBodyEl) return;
                 activeIncidentsTableBodyEl.innerHTML = '';
                 if (mockIncidentsDatabase.length === 0) { activeIncidentsTableBodyEl.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500">Keine aktiven Einsätze.</td></tr>'; return; }
                 mockIncidentsDatabase.forEach(incident => {
@@ -870,7 +909,7 @@
                     const detailsBtn = document.createElement('button'); detailsBtn.innerHTML = '<i class="fas fa-eye"></i> Details';
                     detailsBtn.onclick = () => displayIncidentDetails(incident.incidentId); actionsCell.appendChild(detailsBtn);
                 });
-                 renderDashboardLists(); // Update dashboard when incidents change
+                 renderDashboardLists();
             }
             let currentOpenIncidentId = null;
             function displayIncidentDetails(incidentId) {
@@ -902,7 +941,6 @@
                         return;
                     }
 
-                    // Abmelden der aktuellen Einheit des Nutzers, falls vorhanden und eine neue ID eingegeben wird oder Status "Nicht im Dienst"
                     if (currentActiveUnitId && ( (unitId && unitId !== currentActiveUnitId) || status === "Nicht im Dienst") ) {
                         const myUnitIndex = mockUnitsOnDuty.findIndex(u => u.unitId === currentActiveUnitId && u.officer === currentLoggedInUser);
                         if (myUnitIndex > -1) {
@@ -915,13 +953,12 @@
                     }
 
                     if (status === "Nicht im Dienst") {
-                        // Bereits oben erledigt, wenn currentActiveUnitId existierte
-                        if (!currentActiveUnitId && unitId) { // Falls jemand versucht, eine nicht-existente Einheit abzumelden
+                        if (!currentActiveUnitId && unitId) {
                              const otherUnitIndex = mockUnitsOnDuty.findIndex(u => u.unitId === unitId);
                              if(otherUnitIndex > -1 && mockUnitsOnDuty[otherUnitIndex].officer !== currentLoggedInUser){
                                  alert("Diese Einheit ist von einem anderen Officer registriert.");
                              } else if (otherUnitIndex > -1) {
-                                 mockUnitsOnDuty.splice(otherUnitIndex, 1); // Sollte nicht passieren, wenn Logik stimmt
+                                 mockUnitsOnDuty.splice(otherUnitIndex, 1);
                              }
                         }
                         unitIdInputEl.value = "";
@@ -932,35 +969,32 @@
                         return;
                     }
 
-                    // Anmelden oder Status einer bestehenden eigenen Einheit aktualisieren
                     const targetUnitId = currentActiveUnitId || unitId;
-                    if (!targetUnitId) { // Sollte nicht passieren, wenn obige Logik greift
+                    if (!targetUnitId) {
                         alert("Fehler: Keine Einheit-ID zum Aktualisieren.");
                         return;
                     }
 
-                    // Prüfen, ob die Einheit-ID (falls neu) bereits von einem anderen Officer verwendet wird
                     if (!currentActiveUnitId && mockUnitsOnDuty.some(u => u.unitId === targetUnitId && u.officer !== currentLoggedInUser)) {
                         alert(`Einheit-ID ${targetUnitId} ist bereits von einem anderen Officer belegt.`);
                         return;
                     }
 
                     const existingUnitIndex = mockUnitsOnDuty.findIndex(u => u.unitId === targetUnitId);
-                    if (existingUnitIndex > -1) { // Einheit existiert (kann eigene oder fremde sein)
+                    if (existingUnitIndex > -1) {
                         if (mockUnitsOnDuty[existingUnitIndex].officer === currentLoggedInUser) {
                              mockUnitsOnDuty[existingUnitIndex].status = status;
                         } else {
-                            // Sollte durch obige Prüfung schon abgefangen sein
                             alert(`Einheit-ID ${targetUnitId} ist bereits von einem anderen Officer belegt.`);
                             return;
                         }
-                    } else { // Neue Einheit für diesen Officer
+                    } else {
                         mockUnitsOnDuty.push({ unitId: targetUnitId, officer: currentLoggedInUser, status });
                     }
 
-                    currentActiveUnitId = targetUnitId; // Setze als aktive Einheit des Nutzers
+                    currentActiveUnitId = targetUnitId;
                     unitIdInputEl.value = currentActiveUnitId;
-                    unitIdInputEl.disabled = true; // Sperre das Feld, da Einheit aktiv
+                    unitIdInputEl.disabled = true;
                     updateUnitStatusBtnEl.textContent = "Status aktualisieren";
 
 
@@ -1029,7 +1063,7 @@
                     const viewBtn = document.createElement('button'); viewBtn.innerHTML = '<i class="fas fa-eye"></i> Ansehen';
                     viewBtn.onclick = () => displayReportDetails(report.reportId); actionsCell.appendChild(viewBtn);
                 });
-                renderDashboardLists(); // Update dashboard
+                renderDashboardLists();
             }
 
             function displayReportDetails(reportId) {
@@ -1061,36 +1095,19 @@
                 });
             }
             function renderDashboardLists() {
-                // Dashboard - Aktive Einsätze
                 if (dashboardActiveIncidentsListEl) {
                     dashboardActiveIncidentsListEl.innerHTML = '';
-                    const activeIncidents = mockIncidentsDatabase.filter(inc => inc.status !== "Abgeschlossen").slice(0, 3); // Zeige max 3
-                    if (activeIncidents.length === 0) {
-                        dashboardActiveIncidentsListEl.innerHTML = '<li>Keine aktiven Einsätze</li>';
-                    } else {
-                        activeIncidents.forEach(inc => {
-                            const li = document.createElement('li');
-                            li.textContent = `#${inc.incidentId}: ${inc.type} - ${inc.location}`;
-                            dashboardActiveIncidentsListEl.appendChild(li);
-                        });
-                    }
+                    const activeIncidents = mockIncidentsDatabase.filter(inc => inc.status !== "Abgeschlossen").slice(0, 3);
+                    if (activeIncidents.length === 0) dashboardActiveIncidentsListEl.innerHTML = '<li>Keine aktiven Einsätze</li>';
+                    else activeIncidents.forEach(inc => { const li = document.createElement('li'); li.textContent = `#${inc.incidentId}: ${inc.type} - ${inc.location}`; dashboardActiveIncidentsListEl.appendChild(li); });
                 }
-                // Dashboard - Meine letzten Berichte
                 if (dashboardMyReportsListEl) {
                     dashboardMyReportsListEl.innerHTML = '';
-                    const myReports = mockReportsDatabase.filter(rep => rep.officer === currentLoggedInUser).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0,2); // Zeige max 2
-                    if (myReports.length === 0) {
-                        dashboardMyReportsListEl.innerHTML = '<li>Keine Berichte von Ihnen</li>';
-                    } else {
-                        myReports.forEach(rep => {
-                            const li = document.createElement('li');
-                            li.textContent = `#${rep.reportId}: ${rep.title}`;
-                            dashboardMyReportsListEl.appendChild(li);
-                        });
-                    }
+                    const myReports = mockReportsDatabase.filter(rep => rep.officer === currentLoggedInUser).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0,2);
+                    if (myReports.length === 0) dashboardMyReportsListEl.innerHTML = '<li>Keine Berichte von Ihnen</li>';
+                    else myReports.forEach(rep => { const li = document.createElement('li'); li.textContent = `#${rep.reportId}: ${rep.title}`; dashboardMyReportsListEl.appendChild(li); });
                 }
             }
-
 
             function renderUnitStatusDashboard() {
                 if (!unitStatusListDashboardEl) return;
@@ -1133,7 +1150,7 @@
             }
             updateTime(); setInterval(updateTime, 30000);
 
-            startBootProcess();
+            showPowerButtonScreen(); // Start with power button screen
         });
     </script>
 </body>
